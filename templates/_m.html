@@ -1,0 +1,2 @@
+{% macro card(p) %}<div class="card"><div class="pimg c{{p.category_id%6}}">{{emoji(p.cat)}}</div><h4>{{p.name}}</h4><small>{{p.cat}}</small>
+<div class="row"><b>{{p.price|money}}</b>{% if p.stock>0 %}<form method="post" action="/cart/add/{{p.id}}"><button class="btn sq">🛒</button></form>{% else %}<small>Немає в наявності</small>{% endif %}</div></div>{% endmacro %}

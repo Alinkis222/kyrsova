@@ -1,0 +1,3 @@
+{% extends "base.html" %}{% block c %}<h2>Профіль</h2><form class="panel" method="post" style="max-width:520px"><label>ПІБ</label><input name="full_name" value="{{user.full_name}}" required>
+<label>E-mail</label><input value="{{user.email}}" disabled><label>Телефон</label><input name="phone" value="{{user.phone or ''}}"><label>Адреса</label><input name="address" value="{{user.address or ''}}">
+<label>Відділення пошти</label><input name="post_office" value="{{user.post_office or ''}}"><br><br><button class="btn">Зберегти</button></form>{% endblock %}

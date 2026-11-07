@@ -1,0 +1,4 @@
+{% extends "base.html" %}{% block c %}<h2>Мої замовлення</h2>
+{% for x in orders %}<div class="panel" style="margin-bottom:14px"><div class="row" style="margin:0"><b>Замовлення №{{x.o.id}} від {{x.o.order_date|d}}</b><span class="st {{'s1' if x.o.status=='В обробці' else 's4' if x.o.status=='Скасовано' else 's2' if x.o.status=='Відправлено'}}">{{x.o.status}}</span></div>
+<table>{% for i in x['items'] %}<tr><td>{{i.name}}</td><td>{{i.qty}} × {{i.pr|money}}</td></tr>{% endfor %}</table>
+<div class="row"><span>Оплата: {{x.o.payment}}</span><b>{{x.o.total|money}}</b></div></div>{% else %}<p>Замовлень ще немає.</p>{% endfor %}{% endblock %}

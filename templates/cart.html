@@ -1,0 +1,13 @@
+{% extends "base.html" %}{% block c %}
+<div class="two"><div class="panel"><h3>Товари в кошику</h3>
+{% for i in items %}<div class="item"><div class="pimg c{{i.p.category_id%6}}">{{emoji(i.p.cat)}}</div><div class="nm">{{i.p.name}}<br><small>{{i.p.price|money}}</small></div>
+<form class="qty" method="post" action="/cart/set/{{i.p.id}}"><button name="delta" value="-1">−</button><b>{{i.n}}</b><button name="delta" value="1">+</button></form>
+<b style="width:90px;text-align:right">{{i.sum|money}}</b><form method="post" action="/cart/remove/{{i.p.id}}"><button class="xbtn">🗑</button></form></div>
+{% else %}<p>Кошик порожній</p>{% endfor %}
+<div class="row" style="margin-top:20px"><a class="btn out" href="/catalog">← Продовжити покупки</a><span>Загальна сума: <span class="total">{{total|money}}</span></span></div></div>
+<form class="panel" method="post" action="/checkout"><h3>Дані покупця</h3>{% if not user %}<p><a href="/login" style="color:var(--g)">Увійдіть</a>, щоб оформити замовлення.</p>{% endif %}
+<div class="fg"><div><label>ПІБ *</label><input name="full_name" required value="{{user.full_name if user}}"></div><div><label>Телефон *</label><input name="phone" required value="{{(user.phone or '') if user}}"></div>
+<div><label>E-mail</label><input value="{{user.email if user}}" readonly></div><div><label>Адреса доставки *</label><input name="address" required value="{{(user.address or '') if user}}"></div>
+<div class="full"><label>Відділення пошти (Нова Пошта)</label><input name="post_office" value="{{(user.post_office or '') if user}}"></div>
+<div class="full"><label>Спосіб оплати</label><select name="payment"><option>Післяплата</option><option>Картою онлайн</option><option>Готівка</option></select></div></div><br>
+<button class="btn" style="width:100%" {{'disabled' if not items}}>Підтвердити замовлення →</button></form></div>{% endblock %}

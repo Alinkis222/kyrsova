@@ -1,0 +1,5 @@
+{% extends "base.html" %}{% from "_m.html" import card with context %}{% block c %}
+<div class="hero"><div><h1>Турбота про<br>ваших улюбленців</h1><p>Корма, іграшки, лежанки, аксесуари<br>та багато іншого</p><a class="btn" href="/catalog">Перейти до каталогу →</a></div><div class="big">🐶🐱</div></div>
+<div class="tiles">{% for c in cats %}<a class="tile c{{loop.index0%6}}" href="/catalog?cat={{c.id}}"><span class="e">{{emoji(c.name)}}</span>{{c.name}}</a>{% endfor %}</div>
+<div class="sec"><h2>Популярні товари</h2><a href="/catalog">Дивитися всі →</a></div>
+<div class="grid">{% for p in pop %}{{card(p)}}{% endfor %}</div>{% endblock %}

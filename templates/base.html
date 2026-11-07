@@ -1,0 +1,12 @@
+<!doctype html><html lang="uk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PetShop – Інтернет зоомагазин</title><link rel="stylesheet" href="/static/style.css"></head><body><div class="app">
+<aside class="side"><a class="logo" href="/">🐾 PetShop</a>
+{% set nav=[('/','Головна','🏠'),('/catalog','Каталог','▦'),('/cart','Кошик','🛒'),('/orders','Мої замовлення','📋'),('/profile','Профіль','👤'),('/about','Про магазин','ℹ️')] %}
+{% for h,n,i in nav %}<a class="nav {{ 'on' if request.url.path==h or (h!='/' and request.url.path.startswith(h)) }}" href="{{h}}"><span>{{i}}</span>{{n}}{% if h=='/cart' and cart_n %}<b class="badge">{{cart_n}}</b>{% endif %}</a>{% endfor %}
+{% if user and user.role=='seller' %}<a class="nav" href="/admin"><span>🛠</span>Панель продавця</a>{% endif %}
+</aside><main>
+<header class="top"><form action="/catalog" class="search"><input name="q" placeholder="🔍 Пошук товарів..." value="{{ request.query_params.get('q','') }}"></form>
+<a href="/cart" class="topl">🛒 Кошик {% if cart_n %}<b class="badge">{{cart_n}}</b>{% endif %}</a>
+{% if user %}<a class="topl" href="/profile">👤 {{user.full_name}}</a><a class="topl" href="/logout">Вийти</a>{% else %}<a class="topl" href="/login">👤 Вхід</a>{% endif %}</header>
+{% if flash %}<div class="flash">{{flash}}</div>{% endif %}
+{% block c %}{% endblock %}</main></div></body></html>

@@ -1,0 +1,5 @@
+{% extends "base.html" %}{% from "_m.html" import card with context %}{% block c %}
+<div class="pills"><a class="pill {{'on' if not cat}}" href="/catalog">Усі</a>{% for c in cats %}<a class="pill {{'on' if cat==c.id}}" href="/catalog?cat={{c.id}}">{{c.name}}</a>{% endfor %}</div>
+<div class="cat"><form class="panel" style="align-self:start"><h3>Ціна</h3><input type="hidden" name="cat" value="{{cat}}"><input type="hidden" name="q" value="{{q}}">
+<div class="fg"><input name="pmin" type="number" placeholder="від" value="{{pmin}}"><input name="pmax" type="number" placeholder="до" value="{{pmax}}"></div><br><button class="btn" style="width:100%">Застосувати</button></form>
+<div class="grid">{% for p in prods %}{{card(p)}}{% else %}<p>Нічого не знайдено 🐾</p>{% endfor %}</div></div>{% endblock %}

@@ -1,0 +1,6 @@
+{% extends "base.html" %}{% block c %}<div class="auth"><h1>🐾 PetShop</h1><p style="color:var(--mu)">Для щасливих улюбленців</p>
+<div class="panel">{% if mode=='login' %}<form method="post" action="/login"><div class="tabs"><label style="margin:0"><input type="radio" name="role" value="buyer" checked><span>Покупець</span></label><label style="margin:0"><input type="radio" name="role" value="seller"><span>Продавець</span></label></div>
+<label>E-mail</label><input name="email" type="email" required><label>Пароль</label><input name="password" type="password" required><br><br><button class="btn" style="width:100%">Увійти</button></form>
+<p style="text-align:center">Немає акаунта? <a href="/register" style="color:var(--g)">Зареєструватися</a></p><small style="color:var(--mu)">Демо: alina@mail.com / 12345678; продавець: seller@petshop.ua / seller123</small>
+{% else %}<form method="post" action="/register"><label>ПІБ</label><input name="full_name" required><label>E-mail</label><input name="email" type="email" required><label>Телефон</label><input name="phone"><label>Пароль</label><input name="password" type="password" minlength="6" required><br><br><button class="btn" style="width:100%">Зареєструватися</button></form>{% endif %}
+</div></div>{% endblock %}
