@@ -140,12 +140,9 @@ def _page_shell(title, body, *, user=None, cart_n=0, flash=None, admin=False, se
         top_bar = f'<div class="top"><h1 style="flex:1;margin:0">{escape(title)}</h1><span class="topl">👤 Продавець {escape(user["full_name"])}</span></div>'
     else:
         top_bar = f'''<header class="top"><form action="/catalog" class="search"><input name="q" placeholder="🔍 Пошук товарів..."></form>{''.join(top_links)}</header>'''
-    if admin:
-        template = Path('templates/admin.html').read_text(encoding='utf-8') if Path('templates/admin.html').exists() else "<!doctype html><html><head><meta charset=\"utf-8\"><title>{title}</title><link rel=\"stylesheet\" href=\"/static/style.css\"></head><body><div class=\"app\"><aside class=\"side\">{nav}</aside><main>{top_bar}{flash}{body}</main></div></body></html>"
-        return template.replace("{{TITLE}}", escape(title)).replace("{{NAV}}", _nav_html(user=user, cart_n=cart_n, admin=True, section=section, new_n=new_n)).replace("{{TOPBAR}}", top_bar).replace("{{FLASH}}", _flash_html(flash)).replace("{{BODY}}", body)
-
-    template = Path('templates/base.html').read_text(encoding='utf-8') if Path('templates/base.html').exists() else "<!doctype html><html><head><meta charset=\"utf-8\"><title>{title}</title><link rel=\"stylesheet\" href=\"/static/style.css\"></head><body><div class=\"app\"><aside class=\"side\">{nav}</aside><main>{top_bar}{flash}{body}</main></div></body></html>"
-    return template.replace("{{TITLE}}", escape(title)).replace("{{NAV}}", _nav_html(user=user, cart_n=cart_n, admin=False, section=section)).replace("{{TOPBAR}}", top_bar).replace("{{FLASH}}", _flash_html(flash)).replace("{{BODY}}", body)
+    nav = _nav_html(user=user, cart_n=cart_n, admin=admin, section=section, new_n=new_n)
+    logo = '<a class="logo" href="/">🐾 PetShop</a>'
+    return f'''<!doctype html><html lang="uk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{escape(title)}</title><link rel="stylesheet" href="/static/style.css"></head><body><div class="app"><aside class="side">{logo}{nav}</aside><main>{top_bar}{_flash_html(flash)}{body}</main></div></body></html>'''
 
 
 def render(r, name, **c):
