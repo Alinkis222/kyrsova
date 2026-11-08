@@ -1,8 +1,9 @@
 from html import escape
 from pathlib import Path
 from datetime import date
+import uuid
 
-from fastapi import FastAPI, Form, Request
+from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
@@ -11,9 +12,9 @@ import db
 
 
 db.init()
-app = FastAPI(title="PetShop")
+app = FastAPI(title="Lapka")
 app.add_middleware(SessionMiddleware, secret_key="change-me-in-production")
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
 
 EMOJI = {"Корма": "🥣", "Іграшки": "🐥", "Лежанки": "🛏️", "Нашийники та повідки": "🦮", "Клітки та переноски": "🧳", "Догляд": "🧴"}
 STATUSES = ["Нове", "В обробці", "Відправлено", "Доставлено", "Скасовано"]
@@ -101,11 +102,20 @@ def _icon_for(name):
 
 
 def _product_card(product):
+    image = product.get("image_url")
+    picture = (
+        f'<img class="product-photo" src="{escape(image)}" alt="{escape(product["name"])}">'
+        if image
+        else f'<div class="pimg">{_icon_for(product.get("cat", ""))}</div>'
+    )
     return f"""
     <article class="card">
-      <div class="pimg">{_icon_for(product.get('cat', ''))}</div>
-      <h4>{escape(product['name'])}</h4>
-      <small>{escape(product.get('cat', ''))}</small>
+      <a class="product-link" href="/product/{product['id']}">
+        {picture}
+        <h4>{escape(product['name'])}</h4>
+        <small>{escape(product.get('cat', ''))}</small>
+        <span class="product-more">Детальніше →</span>
+      </a>
       <div class="row">
         <b>{money(product['price'])}</b>
         <form method="post" action="/cart/add/{product['id']}"><button class="btn sq">+ в кошик</button></form>
@@ -129,7 +139,7 @@ def _page_shell(title, body, *, user=None, cart_n=0, flash=None, admin=False, se
     if admin:
         top_bar = f'<div class="top"><h1 style="flex:1;margin:0">{escape(title)}</h1><span class="topl">👤 Продавець {escape(user["full_name"])}</span></div>'
     else:
-        top_bar = f'''<header class="top"><form action="/catalog" class="search"><input name="q" placeholder="🔍 Пошук товарів..." value="{escape(title)}"></form>{''.join(top_links)}</header>'''
+        top_bar = f'''<header class="top"><form action="/catalog" class="search"><input name="q" placeholder="🔍 Пошук товарів..."></form>{''.join(top_links)}</header>'''
     if admin:
         template = Path('templates/admin.html').read_text(encoding='utf-8') if Path('templates/admin.html').exists() else "<!doctype html><html><head><meta charset=\"utf-8\"><title>{title}</title><link rel=\"stylesheet\" href=\"/static/style.css\"></head><body><div class=\"app\"><aside class=\"side\">{nav}</aside><main>{top_bar}{flash}{body}</main></div></body></html>"
         return template.replace("{{TITLE}}", escape(title)).replace("{{NAV}}", _nav_html(user=user, cart_n=cart_n, admin=True, section=section, new_n=new_n)).replace("{{TOPBAR}}", top_bar).replace("{{FLASH}}", _flash_html(flash)).replace("{{BODY}}", body)
@@ -147,7 +157,7 @@ def render(r, name, **c):
         cats = c.get("cats", [])
         pop = c.get("pop", [])
         body = f'''<div class="hero"><div><h1>Турбота про<br>ваших улюбленців</h1><p>Корма, іграшки, лежанки, аксесуари<br>та багато іншого</p><a class="btn" href="/catalog">Перейти до каталогу →</a></div><div class="big">🐶🐱</div></div><div class="tiles">{''.join(_category_tile(cat, idx) for idx, cat in enumerate(cats))}</div><div class="sec"><h2>Популярні товари</h2><a href="/catalog">Дивитися всі →</a></div><div class="grid">{''.join(_product_card(p) for p in pop)}</div>'''
-        return HTMLResponse(_page_shell("PetShop – Інтернет зоомагазин", body, user=user, cart_n=cart_n, flash=flash, section="/"))
+        return HTMLResponse(_page_shell("Lapka – Інтернет зоомагазин", body, user=user, cart_n=cart_n, flash=flash, section="/"))
     if name == "catalog":
         prods = c.get("prods", [])
         cats = c.get("cats", [])
@@ -155,6 +165,23 @@ def render(r, name, **c):
         selected_cat = c.get("cat", 0)
         body = f'''<div class="sec"><h2>Каталог</h2></div><div class="pills">{''.join(f'<a class="pill{ " on" if cat_id == selected_cat else ""}" href="/catalog?cat={cat_id}">{escape(cat["name"])}</a>' for cat_id, cat in [(0, {"name": "Усі"})] + [(item["id"], item) for item in cats])}</div><form class="panel" method="get" action="/catalog"><div class="fg"><div><label>Пошук</label><input name="q" value="{qv}"></div><div><label>Категорія</label><select name="cat"><option value="0">Усі</option>{''.join(f'<option value="{item["id"]}" {"selected" if item["id"] == selected_cat else ""}>{escape(item["name"])}</option>' for item in cats)}</select></div><div><label>Ціна від</label><input name="pmin" value="{escape(c.get('pmin',''))}"></div><div><label>Ціна до</label><input name="pmax" value="{escape(c.get('pmax',''))}"></div></div><button class="btn" type="submit">Фільтрувати</button></form><div class="grid">{''.join(_product_card(p) for p in prods)}</div>'''
         return HTMLResponse(_page_shell("Каталог", body, user=user, cart_n=cart_n, flash=flash, section="/catalog"))
+    if name == "product":
+        product = c["product"]
+        image = product.get("image_url")
+        picture = (
+            f'<img class="product-photo detail-photo" src="{escape(image)}" alt="{escape(product["name"])}">'
+            if image
+            else f'<div class="pimg detail-placeholder">{_icon_for(product.get("cat", ""))}</div>'
+        )
+        description = escape(product.get("description") or "Опис товару ще не додано.").replace("\n", "<br>")
+        availability = "Є в наявності" if product["stock"] > 0 else "Немає в наявності"
+        add_button = (
+            f'<form method="post" action="/cart/add/{product["id"]}"><button class="btn" type="submit">Додати до кошика</button></form>'
+            if product["stock"] > 0
+            else '<button class="btn" type="button" disabled>Немає в наявності</button>'
+        )
+        body = f'''<p><a class="back-link" href="/catalog">← До каталогу</a></p><section class="product-detail"><div class="panel detail-picture">{picture}</div><div class="panel detail-info"><small>{escape(product.get("cat", ""))}</small><h2>{escape(product["name"])}</h2><div class="detail-price">{money(product["price"])}</div><p class="stock">{availability} · Кількість: {product["stock"]}</p><p class="detail-description">{description}</p>{add_button}</div></section>'''
+        return HTMLResponse(_page_shell(product["name"], body, user=user, cart_n=cart_n, flash=flash, section="/catalog"))
     if name == "cart":
         items = c.get("items", [])
         total = c.get("total", 0)
@@ -183,12 +210,18 @@ def render(r, name, **c):
         body = f'''<div class="auth"><div class="panel"><h3>Профіль</h3><form method="post" action="/profile"><label>ПІБ</label><input name="full_name" value="{escape(user['full_name'])}" required><label>Телефон</label><input name="phone" value="{escape(user.get('phone',''))}"><label>Адреса</label><input name="address" value="{escape(user.get('address',''))}"><label>Відділення</label><input name="post_office" value="{escape(user.get('post_office',''))}"><button class="btn" type="submit">Зберегти</button></form></div></div>'''
         return HTMLResponse(_page_shell("Профіль", body, user=user, cart_n=cart_n, flash=flash, section="/profile"))
     if name == "about":
-        body = '<div class="panel"><h3>Про магазин</h3><p>PetShop — зоомагазин з кормами, іграшками, лежанками та аксесуарами для котів, собак та інших домашніх улюбленців.</p></div>'
+        body = '<div class="panel"><h3>Про магазин</h3><p>Lapka — зоомагазин з кормами, іграшками, лежанками та аксесуарами для котів, собак та інших домашніх улюбленців.</p></div>'
         return HTMLResponse(_page_shell("Про магазин", body, user=user, cart_n=cart_n, flash=flash, section="/about"))
     if name == "login":
         mode = c.get("mode", "login")
         action = "/login" if mode == "login" else "/register"
-        form = f'''<div class="auth"><div class="panel"><h3>{"Вхід" if mode == "login" else "Реєстрація"}</h3><form method="post" action="{action}">{"" if mode == "login" else '<label>ПІБ</label><input name="full_name" required>'}<label>Email</label><input name="email" type="email" required>{"" if mode == "login" else '<label>Телефон</label><input name="phone">'}<label>Пароль</label><input name="password" type="password" required>{"" if mode == "login" else ''}<button class="btn" type="submit">{ "Увійти" if mode == "login" else "Зареєструватися"}</button></form></div></div>'''
+        role_picker = (
+            '<div class="tabs"><label style="margin:0"><input type="radio" name="role" value="buyer" checked><span>Покупець</span></label>'
+            '<label style="margin:0"><input type="radio" name="role" value="seller"><span>Продавець</span></label></div>'
+            if mode == "login"
+            else ""
+        )
+        form = f'''<div class="auth"><div class="panel"><h3>{"Вхід" if mode == "login" else "Реєстрація"}</h3><form method="post" action="{action}">{role_picker}{"" if mode == "login" else '<label>ПІБ</label><input name="full_name" required>'}<label>Email</label><input name="email" type="email" required>{"" if mode == "login" else '<label>Телефон</label><input name="phone">'}<label>Пароль</label><input name="password" type="password" required>{"" if mode == "login" else ''}<button class="btn" type="submit">{ "Увійти" if mode == "login" else "Зареєструватися"}</button></form></div></div>'''
         return HTMLResponse(_page_shell("Вхід", form, user=user, cart_n=cart_n, flash=flash, section="/login"))
 
     return HTMLResponse("<h1>Page not found</h1>")
@@ -216,6 +249,14 @@ def catalog(r: Request, q: str = "", cat: int = 0, pmin: str = "", pmax: str = "
         sql += " AND p.price<=?"
         a.append(float(pmax))
     return render(r, "catalog", prods=db.q(sql + " ORDER BY p.id", a), cats=db.q("SELECT * FROM Categories"), cat=cat, q=q, pmin=pmin, pmax=pmax)
+
+
+@app.get("/product/{pid}")
+def product_page(r: Request, pid: int):
+    product = db.q(PSEL + " WHERE p.id=?", (pid,), one=True)
+    if not product:
+        return HTMLResponse("Товар не знайдено", status_code=404)
+    return render(r, "product", product=product)
 
 
 @app.post("/cart/add/{pid}")
@@ -349,10 +390,10 @@ def a_home(r: Request):
         return go("/login")
     ym = date.today().isoformat()[:7]
     st = {
-        "products": db.q("SELECT COUNT(*) FROM Products", one=True)[0],
-        "orders": db.q("SELECT COUNT(*) FROM Orders WHERE status='Нове'", one=True)[0],
-        "clients": db.q("SELECT COUNT(*) FROM Clients WHERE role='buyer'", one=True)[0],
-        "income": db.q("SELECT COALESCE(SUM(total),0) FROM Orders WHERE status!='Скасовано' AND substr(order_date,1,7)=?", (ym,), one=True)[0],
+        "products": db.q("SELECT COUNT(*) AS value FROM Products", one=True)["value"],
+        "orders": db.q("SELECT COUNT(*) AS value FROM Orders WHERE status='Нове'", one=True)["value"],
+        "clients": db.q("SELECT COUNT(*) AS value FROM Clients WHERE role='buyer'", one=True)["value"],
+        "income": db.q("SELECT COALESCE(SUM(total),0) AS value FROM Orders WHERE status!='Скасовано' AND substr(order_date,1,7)=?", (ym,), one=True)["value"],
     }
     last = db.q("SELECT o.*, c.full_name FROM Orders o JOIN Clients c ON c.id = o.client_id ORDER BY o.id DESC LIMIT 5")
     body = f'''<div class="stats"><div class="stat"><span>Товарів</span><b>{st['products']}</b></div><div class="stat"><span>Нових замовлень</span><b>{st['orders']}</b></div><div class="stat"><span>Клієнтів</span><b>{st['clients']}</b></div><div class="stat"><span>Дохід за місяць</span><b>{money(st['income'])}</b></div></div><div class="panel"><div class="sec"><h3>Останні замовлення</h3><a href="/admin/orders">Всі замовлення →</a></div><table><tr><th>№</th><th>Дата</th><th>Клієнт</th><th>Сума</th><th>Статус</th></tr>{''.join(f'<tr><td>{row["id"]}</td><td>{d(row["order_date"])}</td><td>{escape(row["full_name"])}</td><td>{money(row["total"])}</td><td><span class="st">{escape(row["status"])}</span></td></tr>' for row in last)}</table></div>'''
@@ -370,7 +411,7 @@ def a_orders(r: Request):
         for row in rows
     )
     body = f'''<div class="panel"><table><tr><th>№</th><th>Дата</th><th>Клієнт</th><th>Доставка</th><th>Оплата</th><th>Сума</th><th>Статус</th></tr>{order_rows}</table></div>'''
-    return HTMLResponse(_page_shell("Замовлення", body, user=seller, cart_n=sum(r.session.get("cart", {}).values()), flash=r.session.pop("flash", None), admin=True, section="orders", new_n=db.q("SELECT COUNT(*) FROM Orders WHERE status='Нове'", one=True)[0]))
+    return HTMLResponse(_page_shell("Замовлення", body, user=seller, cart_n=sum(r.session.get("cart", {}).values()), flash=r.session.pop("flash", None), admin=True, section="orders", new_n=db.q("SELECT COUNT(*) AS value FROM Orders WHERE status='Нове'", one=True)["value"]))
 
 
 @app.post("/admin/orders/{oid}/status")
@@ -420,15 +461,182 @@ def a_stats(r: Request):
     return HTMLResponse(_page_shell("Статистика", body, user=seller, cart_n=sum(r.session.get("cart", {}).values()), flash=r.session.pop("flash", None), admin=True, section="stats"))
 
 
+PRODUCT_IMAGE_DIR = Path(__file__).parent / "static" / "product-images"
+MAX_PRODUCT_IMAGE_SIZE = 5 * 1024 * 1024
+PRODUCT_IMAGE_TYPES = {
+    "image/jpeg": (".jpg", lambda data: data.startswith(b"\xff\xd8\xff")),
+    "image/png": (".png", lambda data: data.startswith(b"\x89PNG\r\n\x1a\n")),
+    "image/webp": (".webp", lambda data: len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP"),
+    "image/gif": (".gif", lambda data: data.startswith((b"GIF87a", b"GIF89a"))),
+}
+
+
+async def _store_product_image(image):
+    if not image or not image.filename:
+        return None
+    image_type = PRODUCT_IMAGE_TYPES.get(image.content_type)
+    if not image_type:
+        raise ValueError("Оберіть зображення JPEG, PNG, WebP або GIF.")
+    data = await image.read(MAX_PRODUCT_IMAGE_SIZE + 1)
+    if len(data) > MAX_PRODUCT_IMAGE_SIZE:
+        raise ValueError("Розмір зображення не повинен перевищувати 5 МБ.")
+    extension, is_valid_image = image_type
+    if not is_valid_image(data):
+        raise ValueError("Файл не відповідає формату зображення.")
+    PRODUCT_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+    filename = f"{uuid.uuid4().hex}{extension}"
+    (PRODUCT_IMAGE_DIR / filename).write_bytes(data)
+    return f"/static/product-images/{filename}"
+
+
+def _remove_product_image(image_url):
+    prefix = "/static/product-images/"
+    if image_url and image_url.startswith(prefix):
+        path = PRODUCT_IMAGE_DIR / Path(image_url).name
+        if path.parent == PRODUCT_IMAGE_DIR and path.exists():
+            path.unlink()
+
+
+def _admin_product_form(r, seller, product=None):
+    categories = db.q("SELECT id, name FROM Categories ORDER BY name")
+    suppliers = db.q("SELECT id, name FROM Suppliers ORDER BY name")
+    selected_category = product["category_id"] if product else None
+    supplier_ids = {supplier["id"] for supplier in suppliers}
+    selected_supplier = product.get("supplier_id") if product and product.get("supplier_id") in supplier_ids else None
+    category_options = "".join(
+        f'<option value="{category["id"]}" {"selected" if category["id"] == selected_category else ""}>{escape(category["name"])}</option>'
+        for category in categories
+    )
+    supplier_options = '<option value="">Не вказаний</option>' + "".join(
+        f'<option value="{supplier["id"]}" {"selected" if supplier["id"] == selected_supplier else ""}>{escape(supplier["name"])}</option>'
+        for supplier in suppliers
+    )
+    is_edit = product is not None
+    action = f'/admin/products/{product["id"]}/edit' if is_edit else "/admin/products/new"
+    image_preview = (
+        f'<div class="current-image"><span>Поточне фото</span><img src="{escape(product["image_url"])}" alt="Фото товару"></div>'
+        if is_edit and product.get("image_url")
+        else ""
+    )
+    body = f'''<div class="panel product-form-panel"><p><a class="back-link" href="/admin/products">← До списку товарів</a></p><h2>{"Редагувати товар" if is_edit else "Новий товар"}</h2><form method="post" action="{action}" enctype="multipart/form-data"><div class="fg"><div class="full"><label>Назва товару</label><input name="name" value="{escape(product["name"]) if is_edit else ""}" required maxlength="200"></div><div><label>Категорія</label><select name="category_id" required>{category_options}</select></div><div><label>Постачальник</label><select name="supplier_id">{supplier_options}</select></div><div><label>Ціна, грн</label><input name="price" type="number" min="0" step="0.01" value="{product["price"] if is_edit else ""}" required></div><div><label>Кількість на складі</label><input name="stock" type="number" min="0" step="1" value="{product["stock"] if is_edit else 0}" required></div><div class="full"><label>Опис</label><textarea name="description" rows="5">{escape(product.get("description") or "") if is_edit else ""}</textarea></div><div class="full"><label>{"Замінити фото" if is_edit and product.get("image_url") else "Фото товару"}</label><input name="image" type="file" accept="image/jpeg,image/png,image/webp,image/gif"><small>JPEG, PNG, WebP або GIF, до 5 МБ. Якщо залишити поле порожнім, поточне фото збережеться.</small>{image_preview}</div></div><div class="form-actions"><button class="btn" type="submit">{"Зберегти зміни" if is_edit else "Додати товар"}</button><a class="btn out" href="/admin/products">Скасувати</a></div></form></div>'''
+    return HTMLResponse(_page_shell("Редагування товару" if is_edit else "Новий товар", body, user=seller, cart_n=sum(r.session.get("cart", {}).values()), flash=r.session.pop("flash", None), admin=True, section="products"))
+
+
+async def _save_admin_product(r, seller, name, category_id, supplier_id, price, stock, description, image, product_id=None):
+    if not seller:
+        return go("/login", r, "Увійдіть як продавець, щоб керувати товарами")
+    product = db.q("SELECT * FROM Products WHERE id=?", (product_id,), one=True) if product_id else None
+    if product_id and not product:
+        return go("/admin/products", r, "Товар не знайдено")
+    if not name.strip() or len(name.strip()) > 200:
+        return go(f"/admin/products/{product_id}/edit" if product_id else "/admin/products/new", r, "Назва товару має містити від 1 до 200 символів")
+    if price < 0 or stock < 0:
+        return go(f"/admin/products/{product_id}/edit" if product_id else "/admin/products/new", r, "Ціна та кількість не можуть бути від'ємними")
+    if not db.q("SELECT id FROM Categories WHERE id=?", (category_id,), one=True):
+        return go(f"/admin/products/{product_id}/edit" if product_id else "/admin/products/new", r, "Оберіть наявну категорію")
+    supplier = None
+    if supplier_id:
+        try:
+            supplier_id = int(supplier_id)
+        except ValueError:
+            return go(f"/admin/products/{product_id}/edit" if product_id else "/admin/products/new", r, "Оберіть наявного постачальника")
+        supplier = db.q("SELECT id FROM Suppliers WHERE id=?", (supplier_id,), one=True)
+        if not supplier:
+            return go(f"/admin/products/{product_id}/edit" if product_id else "/admin/products/new", r, "Оберіть наявного постачальника")
+    else:
+        supplier_id = None
+    try:
+        new_image_url = await _store_product_image(image)
+    except ValueError as error:
+        return go(f"/admin/products/{product_id}/edit" if product_id else "/admin/products/new", r, str(error))
+    image_url = new_image_url or (product.get("image_url") if product else None)
+    values = (name.strip(), category_id, supplier_id, price, stock, description.strip(), image_url)
+    if product:
+        db.ex("UPDATE Products SET name=?,category_id=?,supplier_id=?,price=?,stock=?,description=?,image_url=? WHERE id=?", (*values, product_id))
+        if new_image_url:
+            _remove_product_image(product.get("image_url"))
+        message = "Товар оновлено"
+    else:
+        db.ex("INSERT INTO Products(name,category_id,supplier_id,price,stock,description,image_url) VALUES(?,?,?,?,?,?,?)", values)
+        message = "Товар додано"
+    return go("/admin/products", r, message)
+
+
 @app.get("/admin/products")
 def a_products(r: Request):
     seller = _only_seller(r)
     if not seller:
         return go("/login")
-    rows = db.q("SELECT p.id, p.name, c.name AS category, p.price, p.stock FROM Products p JOIN Categories c ON c.id = p.category_id ORDER BY p.id DESC")
-    headers = ["ID", "Назва", "Категорія", "Ціна", "На складі"]
-    body = '<div class="panel"><table><tr>' + ''.join(f'<th>{h}</th>' for h in headers) + '</tr>' + ''.join(f'<tr><td>{row["id"]}</td><td>{escape(row["name"])}</td><td>{escape(row["category"])}</td><td>{money(row["price"])}</td><td>{row["stock"]}</td></tr>' for row in rows) + '</table></div>'
+    rows = db.q("SELECT p.id, p.name, p.image_url, c.name AS category, p.price, p.stock FROM Products p JOIN Categories c ON c.id = p.category_id ORDER BY p.id DESC")
+    table_rows = "".join(
+        f'''<tr><td>{row["id"]}</td><td><div class="admin-product">{f'<img class="admin-thumb" src="{escape(row["image_url"])}" alt="">' if row.get("image_url") else '<span class="admin-thumb-placeholder">🐾</span>'}<a href="/product/{row["id"]}">{escape(row["name"])}</a></div></td><td>{escape(row["category"])}</td><td>{money(row["price"])}</td><td>{row["stock"]}</td><td><div class="admin-actions"><a class="btn sq out" href="/admin/products/{row["id"]}/edit">Редагувати</a><form method="post" action="/admin/products/{row["id"]}/delete" onsubmit="return confirm('Видалити цей товар?')"><button class="btn sq red" type="submit">Видалити</button></form></div></td></tr>'''
+        for row in rows
+    )
+    body = f'''<div class="sec admin-page-title"><h2>Товари</h2><a class="btn" href="/admin/products/new">＋ Додати товар</a></div><div class="panel admin-table-wrap"><table><tr><th>ID</th><th>Товар</th><th>Категорія</th><th>Ціна</th><th>На складі</th><th>Дії</th></tr>{table_rows or '<tr><td colspan="6">Товарів ще немає</td></tr>'}</table></div>'''
     return HTMLResponse(_page_shell("Товари", body, user=seller, cart_n=sum(r.session.get("cart", {}).values()), flash=r.session.pop("flash", None), admin=True, section="products"))
+
+
+@app.get("/admin/products/new")
+def a_product_new(r: Request):
+    seller = _only_seller(r)
+    if not seller:
+        return go("/login", r)
+    return _admin_product_form(r, seller)
+
+
+@app.get("/admin/products/{pid}/edit")
+def a_product_edit(r: Request, pid: int):
+    seller = _only_seller(r)
+    if not seller:
+        return go("/login", r)
+    product = db.q("SELECT * FROM Products WHERE id=?", (pid,), one=True)
+    if not product:
+        return go("/admin/products", r, "Товар не знайдено")
+    return _admin_product_form(r, seller, product)
+
+
+@app.post("/admin/products/new")
+async def a_product_create(
+    r: Request,
+    name: str = Form(...),
+    category_id: int = Form(...),
+    supplier_id: str = Form(""),
+    price: float = Form(...),
+    stock: int = Form(0),
+    description: str = Form(""),
+    image: UploadFile = File(None),
+):
+    return await _save_admin_product(r, _only_seller(r), name, category_id, supplier_id, price, stock, description, image)
+
+
+@app.post("/admin/products/{pid}/edit")
+async def a_product_update(
+    r: Request,
+    pid: int,
+    name: str = Form(...),
+    category_id: int = Form(...),
+    supplier_id: str = Form(""),
+    price: float = Form(...),
+    stock: int = Form(0),
+    description: str = Form(""),
+    image: UploadFile = File(None),
+):
+    return await _save_admin_product(r, _only_seller(r), name, category_id, supplier_id, price, stock, description, image, pid)
+
+
+@app.post("/admin/products/{pid}/delete")
+def a_product_delete(r: Request, pid: int):
+    seller = _only_seller(r)
+    if not seller:
+        return go("/login", r)
+    product = db.q("SELECT id,image_url FROM Products WHERE id=?", (pid,), one=True)
+    if not product:
+        return go("/admin/products", r, "Товар не знайдено")
+    if db.q("SELECT 1 FROM Order_Details WHERE product_id=? LIMIT 1", (pid,), one=True):
+        return go("/admin/products", r, "Товар є у замовленнях і його не можна видалити")
+    db.ex("DELETE FROM Products WHERE id=?", (pid,))
+    _remove_product_image(product.get("image_url"))
+    return go("/admin/products", r, "Товар видалено")
 
 
 @app.get("/admin/categories")

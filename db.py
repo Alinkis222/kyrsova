@@ -1,4 +1,4 @@
-"""БД PetShop.
+"""БД Lapka.
 Підключення до файлу Access .accdb, якщо він доступний. Інакше — SQLite fallback.
 """
 import hashlib
@@ -105,7 +105,7 @@ CREATE TABLE IF NOT EXISTS Categories(id INTEGER PRIMARY KEY AUTOINCREMENT, name
 CREATE TABLE IF NOT EXISTS Suppliers(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, phone TEXT, email TEXT, address TEXT);
 CREATE TABLE IF NOT EXISTS Products(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL,
   category_id INTEGER NOT NULL REFERENCES Categories(id), supplier_id INTEGER REFERENCES Suppliers(id),
-  price REAL NOT NULL, stock INTEGER NOT NULL DEFAULT 0, description TEXT);
+  price REAL NOT NULL, stock INTEGER NOT NULL DEFAULT 0, description TEXT, image_url TEXT);
 CREATE TABLE IF NOT EXISTS Clients(id INTEGER PRIMARY KEY AUTOINCREMENT, full_name TEXT NOT NULL, phone TEXT,
   email TEXT UNIQUE, address TEXT, post_office TEXT, password_hash TEXT, role TEXT DEFAULT 'buyer');
 CREATE TABLE IF NOT EXISTS Orders(id INTEGER PRIMARY KEY AUTOINCREMENT, client_id INTEGER NOT NULL REFERENCES Clients(id),
@@ -119,8 +119,15 @@ def _ensure_sqlite_schema():
     c = sqlite3.connect(SQLITE_DB)
     c.row_factory = sqlite3.Row
     c.executescript(SCHEMA)
+    _migrate_sqlite_schema(c)
     c.commit()
     c.close()
+
+
+def _migrate_sqlite_schema(c):
+    product_columns = {row[1] for row in c.execute("PRAGMA table_info(Products)")}
+    if "image_url" not in product_columns:
+        c.execute("ALTER TABLE Products ADD COLUMN image_url TEXT")
 
 
 def _ensure_access_schema():
@@ -157,6 +164,12 @@ def _sync_access_to_sqlite():
     sqlite_c = sqlite3.connect(SQLITE_DB)
     sqlite_c.row_factory = sqlite3.Row
     sqlite_c.executescript(SCHEMA)
+    _migrate_sqlite_schema(sqlite_c)
+    if sqlite_c.execute("SELECT 1 FROM Products LIMIT 1").fetchone():
+        sqlite_c.close()
+        access.close()
+        USE_ACCESS = False
+        return
     for table in ["Order_Details", "Orders", "Products", "Suppliers", "Categories", "Clients"]:
         sqlite_c.execute(f"DELETE FROM {table}")
 
@@ -250,4 +263,3 @@ if not USE_ACCESS:
             init()
     except Exception:
         init()
-
