@@ -1,32 +1,7 @@
-<!doctype html><html lang="uk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PetShop – Панель продавця</title><link rel="stylesheet" href="/static/style.css"></head><body><div class="app">
-<aside class="side"><a class="logo" href="/">🐾 PetShop</a>
-{% set nav=[('home','/admin','Головна','🏠'),('products','/admin/products','Товари','📦'),('categories','/admin/categories','Категорії','🏷'),('suppliers','/admin/suppliers','Постачальники','🚚'),('orders','/admin/orders','Замовлення','🛒'),('clients','/admin/clients','Клієнти','👥'),('stats','/admin/stats','Статистика','📊')] %}
-{% for k,h,n,i in nav %}<a class="nav {{ 'on' if section==k or (section=='crud' and ent==k) }}" href="{{h}}"><span>{{i}}</span>{{n}}{% if k=='orders' and new_n %}<b class="badge">{{new_n}}</b>{% endif %}</a>{% endfor %}
-<a class="nav" href="/logout" style="margin-top:auto"><span>↩</span>Вихід</a></aside>
-<main><div class="top"><h1 style="flex:1;margin:0">{{ {'home':'Головна','orders':'Замовлення','clients':'Клієнти','stats':'Статистика'}.get(section, e.title if e else '') }}</h1><span class="topl">👤 Продавець {{user.full_name}}</span></div>
-{% if flash %}<div class="flash">{{flash}}</div>{% endif %}
-
-{% if section=='home' %}
-<div class="stats"><div class="stat"><span>Товарів</span><b>{{st.products}}</b></div><div class="stat"><span>Нових замовлень</span><b>{{st.orders}}</b></div><div class="stat"><span>Клієнтів</span><b>{{st.clients}}</b></div><div class="stat"><span>Дохід за місяць</span><b>{{st.income|money}}</b></div></div>
-<div class="panel"><div class="sec"><h3>Останні замовлення</h3><a href="/admin/orders">Всі замовлення →</a></div><table><tr><th>№</th><th>Дата</th><th>Клієнт</th><th>Сума</th><th>Статус</th></tr>
-{% for o in last %}<tr><td>{{'%04d'|format(o.id)}}</td><td>{{o.order_date|d}}</td><td>{{o.full_name}}</td><td>{{o.total|money}}</td><td><span class="st {{'s1' if o.status=='В обробці' else 's4' if o.status=='Скасовано' else 's2' if o.status=='Відправлено'}}">{{o.status}}</span></td></tr>{% endfor %}</table></div>
-{% if new_n %}<div class="alert"><div><b>{{new_n}} нових замовлень</b><br>Потрібно обробити нові замовлення</div><a class="btn red" href="/admin/orders">→</a></div>{% endif %}
-
-{% elif section=='orders' %}<div class="panel"><table><tr><th>№</th><th>Дата</th><th>Клієнт</th><th>Доставка</th><th>Оплата</th><th>Сума</th><th>Статус</th></tr>
-{% for o in rows %}<tr><td>{{o.id}}</td><td>{{o.order_date|d}}</td><td>{{o.full_name}}<br><small>{{o.phone}}</small></td><td>{{o.address}}<br><small>{{o.post_office}}</small></td><td>{{o.payment}}</td><td>{{o.total|money}}</td>
-<td><form method="post" action="/admin/orders/{{o.id}}/status"><select name="status" onchange="this.form.submit()">{% for s in STATUSES %}<option {{'selected' if s==o.status}}>{{s}}</option>{% endfor %}</select></form></td></tr>{% endfor %}</table></div>
-
-{% elif section=='clients' %}<div class="panel"><table><tr><th>ПІБ</th><th>Телефон</th><th>Email</th><th>Адреса</th><th>Відділення</th><th>Замовлень</th><th>Сума</th></tr>
-{% for c in rows %}<tr><td>{{c.full_name}}</td><td>{{c.phone}}</td><td>{{c.email}}</td><td>{{c.address}}</td><td>{{c.post_office}}</td><td>{{c.n}}</td><td>{{c.s|money}}</td></tr>{% endfor %}</table></div>
-
-{% elif section=='stats' %}<div class="two"><div class="panel"><h3>Дохід по місяцях</h3>{% set mx=(months|map(attribute='s')|max) if months else 1 %}{% for m in months %}<div class="brow"><span>{{m.m}}</span><div class="bar" style="width:{{(m.s/mx*100)|int}}%"></div><span>{{m.s|money}}</span></div>{% endfor %}</div>
-<div class="panel"><h3>Топ товарів (шт.)</h3>{% set mt=(top|map(attribute='q')|max) if top else 1 %}{% for t in top %}<div class="brow"><span>{{t.name[:16]}}</span><div class="bar" style="width:{{(t.q/mt*100)|int}}%"></div><b>{{t.q}}</b></div>{% endfor %}
-<h3>Замовлення за статусом</h3>{% for s in by_status %}<div class="brow"><span>{{s.status}}</span><b>{{s.n}}</b></div>{% endfor %}</div></div>
-
-{% elif section=='crud' %}<div class="two" style="grid-template-columns:1.6fr 1fr;align-items:start"><div class="panel"><table><tr>{% if rows %}{% for k in rows[0].keys()[1:] %}<th>{{k}}</th>{% endfor %}{% endif %}<th></th></tr>
-{% for r in rows %}<tr>{% for k in r.keys()[1:] %}<td>{{r[k]}}</td>{% endfor %}<td style="white-space:nowrap"><a href="/admin/{{ent}}?edit={{r['id']}}">✏️</a>
-<form method="post" action="/admin/{{ent}}/{{r['id']}}/delete" style="display:inline" onsubmit="return confirm('Видалити?')"><button class="xbtn">🗑</button></form></td></tr>{% endfor %}</table></div>
-<form class="panel" method="post" action="/admin/{{ent}}/save"><h3>{{'Редагувати' if row else 'Додати'}}</h3>{% if row %}<input type="hidden" name="id" value="{{row['id']}}">{% endif %}
-{% for k,l,t in e.f %}<label>{{l}}</label>{% if t.startswith('sel:') %}<select name="{{k}}">{% for o in opts[t[4:]] %}<option value="{{o['id']}}" {{'selected' if row and row[k]==o['id']}}>{{o['name']}}</option>{% endfor %}</select>
-{% else %}<input name="{{k}}" type="{{t}}" step="any" value="{{row[k] if row and row[k] is not none}}" {{'required' if k=='name'}}>{% endif %}{% endfor %}<br><br><button class="btn">Зберегти</button> {% if row %}<a class="btn out" href="/admin/{{ent}}">Скасувати</a>{% endif %}</form></div>
-{% endif %}</main></div></body></html>
+<!doctype html><html lang="uk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{TITLE}}</title><link rel="stylesheet" href="/static/style.css"></head><body><div class="app">
+<aside class="side"><a class="logo" href="/">🐾 Lapka</a>
+{{NAV}}
+</aside><main>
+{{TOPBAR}}
+{{FLASH}}
+{{BODY}}</main></div></body></html>
